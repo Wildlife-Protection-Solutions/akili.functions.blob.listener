@@ -3,14 +3,19 @@
 
 from typing import Optional
 from azure.cosmos import CosmosClient, exceptions
-import settings
+import os
+
+COSMOS_DB_ENDPOINT = os.environ["COSMOS_DB_ENDPOINT"]
+COSMOS_DB_KEY = os.environ["COSMOS_DB_KEY"]
+COSMOS_DATABASE_NAME = os.environ.get("COSMOS_DATABASE_NAME")
+COSMOS_DEPLOYMENTS_DB_CONTAINER = os.environ.get("COSMOS_DEPLOYMENTS_DB_CONTAINER")
 
 class BaseCosmosDBDAL:
-    def __init__(self, container_name: str):
-        """ Initializes the CosmosDBDAL with the Cosmos DB account settings. """
-        self.client = CosmosClient(settings.COSMOS_DB_ENDPOINT, settings.COSMOS_DB_KEY)
-        self.database = self.client.get_database_client(settings.COSMOS_DB_DATABASE)
-        self.container = self.database.get_container_client(container_name)
+    def __init__(self):
+        """ Initializes the Cosmos DB DAL with the Cosmos DB account settings. """
+        self.client = CosmosClient(COSMOS_DB_ENDPOINT, COSMOS_DB_KEY)
+        self.database = self.client.get_database_client(COSMOS_DATABASE_NAME)
+        self.container = self.database.get_container_client(COSMOS_DEPLOYMENTS_DB_CONTAINER)
 
     def add_item(self, item: dict):
         """
