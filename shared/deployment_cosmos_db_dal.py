@@ -2,10 +2,11 @@
 
 from typing import Optional
 from uuid import UUID
-from cosmos_db_dal import BaseCosmosDBDAL
+
 from datetime import datetime, timezone
 
-from shared.cosmos_documents import DeploymentMetadataDocument
+from shared.cosmos_db_dal import BaseCosmosDBDAL
+from shared.cosmos_documents import DeploymentFileHashDocument, DeploymentMetadataDocument
 
 
 class DeploymentCosmosDBDAL(BaseCosmosDBDAL):

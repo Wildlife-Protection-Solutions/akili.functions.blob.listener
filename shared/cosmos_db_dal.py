@@ -2,20 +2,12 @@
 # A base class for interacting with Cosmos DB.
 
 from typing import Optional
-from azure.cosmos import CosmosClient, exceptions
-import os
-
-COSMOS_DB_ENDPOINT = os.environ["COSMOS_DB_ENDPOINT"]
-COSMOS_DB_KEY = os.environ["COSMOS_DB_KEY"]
-COSMOS_DATABASE_NAME = os.environ.get("COSMOS_DATABASE_NAME")
-COSMOS_DEPLOYMENTS_DB_CONTAINER = os.environ.get("COSMOS_DEPLOYMENTS_DB_CONTAINER")
+from azure.cosmos import exceptions, ContainerProxy
 
 class BaseCosmosDBDAL:
-    def __init__(self):
+    def __init__(self, container: ContainerProxy):
         """ Initializes the Cosmos DB DAL with the Cosmos DB account settings. """
-        self.client = CosmosClient(COSMOS_DB_ENDPOINT, COSMOS_DB_KEY)
-        self.database = self.client.get_database_client(COSMOS_DATABASE_NAME)
-        self.container = self.database.get_container_client(COSMOS_DEPLOYMENTS_DB_CONTAINER)
+        self.container = container
 
     def add_item(self, item: dict):
         """

@@ -1,7 +1,24 @@
+import datetime
 import json
 import logging
+from typing import Any, Dict, Optional
 import azure.functions as func
+from azure.cosmos import CosmosClient, ContainerProxy
 import os
+from azure.storage.blob import BlobServiceClient
+
+from shared.deployment_cosmos_db_dal import DeploymentCosmosDBDAL
+
+COSMOS_DB_ENDPOINT = os.environ["COSMOS_DB_ENDPOINT"]
+COSMOS_DB_KEY = os.environ["COSMOS_DB_KEY"]
+COSMOS_DATABASE_NAME = os.environ.get("COSMOS_DATABASE_NAME")
+COSMOS_DEPLOYMENTS_CONTAINER = os.environ.get("COSMOS_DEPLOYMENTS_DB_CONTAINER")
+COSMOS_CONFIG_CONTAINER = os.environ.get("COSMOS_CONFIG_DB_CONTAINER")
+
+client = CosmosClient(COSMOS_DB_ENDPOINT, COSMOS_DB_KEY)
+database = client.get_database_client(COSMOS_DATABASE_NAME)
+deployment_container: ContainerProxy = database.get_container_client(COSMOS_DEPLOYMENTS_CONTAINER)
+# config_container: ContainerProxy = database.get_container_client(COSMOS_CONFIG_CONTAINER)
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -304,127 +321,103 @@ def get_configurations(req: func.HttpRequest) -> func.HttpResponse:
 #         logging.error(f"Error retrieving configuration: {str(e)}")
 #         return {}
 
-# def should_process_blob(storage_account_name: str, container_name: str) -> bool:
-#     """Check if we should process blobs from this storage account and container."""
-#     config = get_storage_account_config()
-    
-#     if storage_account_name not in config:
-#         return False
-    
-#     account_config = config[storage_account_name]
-#     if not account_config.get('enabled', False):
-#         return False
-    
-#     # If containers list is empty, monitor all containers in the account
-#     containers = account_config.get('containers', [])
-#     if not containers:
-#         return True
-    
-#     # Check if this specific container is in the monitored list
-#     return container_name in containers
+def should_process_blob(storage_account_name: str, container_name: str) -> bool:
+    """Check if we should process blobs from this storage account and container."""
+    return True  # For now, we process all blobs
 
-# def extract_blob_metadata(blob_url: str, storage_account_name: str) -> Optional[Dict[str, Any]]:
-#     """Extract metadata from blob using the configured connection string."""
-#     try:
-#         config = get_storage_account_config()
-#         if storage_account_name not in config:
-#             logging.error(f"No configuration found for storage account: {storage_account_name}")
-#             return None
+def extract_blob_metadata(blob_url: str, storage_account_name: str) -> Optional[Dict[str, Any]]:
+    """Extract metadata from blob using the configured connection string."""
+    try:
+        config = get_storage_account_config()
+        if storage_account_name not in config:
+            logging.error(f"No configuration found for storage account: {storage_account_name}")
+            return None
         
-#         connection_string = config[storage_account_name].get('connection_string')
-#         if not connection_string:
-#             logging.error(f"No connection string found for storage account: {storage_account_name}")
-#             return None
+        connection_string = config[storage_account_name].get('connection_string')
+        if not connection_string:
+            logging.error(f"No connection string found for storage account: {storage_account_name}")
+            return None
         
-#         # Parse blob URL to get container and blob name
-#         url_parts = blob_url.split('/')
-#         container_name = url_parts[-2]
-#         blob_name = url_parts[-1]
+        # Parse blob URL to get container and blob name
+        url_parts = blob_url.split('/')
+        container_name = url_parts[-2]
+        blob_name = url_parts[-1]
         
-#         # Get blob client
-#         blob_service_client = BlobServiceClient.from_connection_string(connection_string)
-#         blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        # Get blob client
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
         
-#         # Get blob properties
-#         properties = blob_client.get_blob_properties()
+        # Get blob properties
+        properties = blob_client.get_blob_properties()
         
-#         metadata = {
-#             'id': f"{storage_account_name}_{container_name}_{blob_name}_{datetime.utcnow().isoformat()}",
-#             'storage_account_name': storage_account_name,
-#             'container_name': container_name,
-#             'blob_name': blob_name,
-#             'blob_url': blob_url,
-#             'size': properties.size,
-#             'content_type': properties.content_settings.content_type,
-#             'etag': properties.etag,
-#             'last_modified': properties.last_modified.isoformat() if properties.last_modified else None,
-#             'creation_time': properties.creation_time.isoformat() if properties.creation_time else None,
-#             'content_md5': properties.content_settings.content_md5,
-#             'metadata': dict(properties.metadata) if properties.metadata else {},
-#             'processed_at': datetime.utcnow().isoformat(),
-#             'partition_key': f"{storage_account_name}_{container_name}"
-#         }
+        metadata = {
+            'id': f"{storage_account_name}_{container_name}_{blob_name}_{datetime.utcnow().isoformat()}",
+            'storage_account_name': storage_account_name,
+            'container_name': container_name,
+            'blob_name': blob_name,
+            'blob_url': blob_url,
+            'size': properties.size,
+            'content_type': properties.content_settings.content_type,
+            'etag': properties.etag,
+            'last_modified': properties.last_modified.isoformat() if properties.last_modified else None,
+            'creation_time': properties.creation_time.isoformat() if properties.creation_time else None,
+            'content_md5': properties.content_settings.content_md5,
+            'metadata': dict(properties.metadata) if properties.metadata else {},
+            'processed_at': datetime.utcnow().isoformat(),
+            'partition_key': f"{storage_account_name}_{container_name}"
+        }
         
-#         return metadata
+        return metadata
         
-#     except Exception as e:
-#         logging.error(f"Error extracting blob metadata: {str(e)}")
-#         return None
+    except Exception as e:
+        logging.error(f"Error extracting blob metadata: {str(e)}")
+        return None
 
-# def save_metadata_to_cosmos(metadata: Dict[str, Any]) -> bool:
-#     """Save blob metadata to Cosmos DB."""
-#     try:
-#         metadata_container.create_item(body=metadata)
-#         logging.info(f"Successfully saved metadata for blob: {metadata['blob_name']}")
-#         return True
-#     except exceptions.CosmosResourceExistsError:
-#         logging.warning(f"Metadata already exists for blob: {metadata['blob_name']}")
-#         return True
-#     except Exception as e:
-#         logging.error(f"Error saving metadata to Cosmos DB: {str(e)}")
-#         return False
-
-# @app.event_grid_trigger(arg_name="azeventgrid")
-# def blob_created_handler(azeventgrid: func.EventGridEvent):
-#     """Handle blob created events from Event Grid."""
-#     try:
-#         # Parse event data
-#         event_data = azeventgrid.get_json()
-#         logging.info(f"Received event: {json.dumps(event_data, indent=2)}")
+@app.event_grid_trigger(arg_name="azeventgrid")
+def blob_created_handler(azeventgrid: func.EventGridEvent):
+    """Handle blob created events from Event Grid."""
+    try:
+        # Parse event data
+        event_data = azeventgrid.get_json()
+        print(f"Received event: {json.dumps(event_data, indent=2)}")
         
-#         # Extract information from event
-#         blob_url = event_data.get('url', '')
-#         event_type = azeventgrid.event_type
+        # Extract information from event
+        blob_url = event_data.get('url', '')
+        event_type = azeventgrid.event_type
         
-#         # Only process blob creation events
-#         if event_type != 'Microsoft.Storage.BlobCreated':
-#             logging.info(f"Ignoring event type: {event_type}")
-#             return
+        # Only process blob creation events
+        if event_type != 'Microsoft.Storage.BlobCreated':
+            logging.info(f"Ignoring event type: {event_type}")
+            return
         
-#         # Extract storage account name from URL
-#         storage_account_name = blob_url.split('//')[1].split('.')[0]
-#         container_name = blob_url.split('/')[-2]
+        # Extract storage account name from URL
+        storage_account_name = blob_url.split('//')[1].split('.')[0]
+        container_name = blob_url.split('/')[-2]
         
-#         logging.info(f"Processing blob from storage account: {storage_account_name}, container: {container_name}")
+        logging.info(f"Processing blob from storage account: {storage_account_name}, container: {container_name}, event: {event_data}")
         
-#         # Check if we should process this blob
-#         if not should_process_blob(storage_account_name, container_name):
-#             logging.info(f"Skipping blob processing for {storage_account_name}/{container_name} - not configured or disabled")
-#             return
+        # Check if we should process this blob
+        if not should_process_blob(storage_account_name, container_name):
+            logging.info(f"Skipping blob processing for {storage_account_name}/{container_name} - not configured or disabled")
+            return
         
-#         # Extract blob metadata
-#         metadata = extract_blob_metadata(blob_url, storage_account_name)
-#         if not metadata:
-#             logging.error("Failed to extract blob metadata")
-#             return
+        # Extract blob metadata
+        metadata = extract_blob_metadata(
+            blob_url=blob_url,
+            storage_account_name=storage_account_name
+        )
         
-#         # Save to Cosmos DB
-#         if save_metadata_to_cosmos(metadata):
-#             logging.info(f"Successfully processed blob: {metadata['blob_name']}")
-#         else:
-#             logging.error(f"Failed to save metadata for blob: {metadata['blob_name']}")
+        if not metadata:
+            logging.error("Failed to extract blob metadata")
+            return
+        
+        # # Save to Cosmos DB
+        # if save_metadata_to_cosmos(metadata):
+        #     logging.info(f"Successfully processed blob: {metadata['blob_name']}")
+        # else:
+        #     logging.error(f"Failed to save metadata for blob: {metadata['blob_name']}")
             
-#     except Exception as e:
-#         logging.error(f"Error processing blob event: {str(e)}")
-#         raise
+    except Exception as e:
+        logging.error(f"Error processing blob event: {str(e)}")
+        raise
     
