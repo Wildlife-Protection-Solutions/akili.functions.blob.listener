@@ -20,9 +20,9 @@ database = client.get_database_client(COSMOS_DATABASE_NAME)
 deployment_container: ContainerProxy = database.get_container_client(COSMOS_DEPLOYMENTS_CONTAINER)
 # config_container: ContainerProxy = database.get_container_client(COSMOS_CONFIG_CONTAINER)
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
+app = func.FunctionApp()
 
-# Configuration functions
+@app.function_name(name="get_deployment_metadata")
 @app.route(route="config", methods=["GET"])
 def get_configurations(req: func.HttpRequest) -> func.HttpResponse:
     """Get all storage account configurations."""
@@ -373,6 +373,8 @@ def extract_blob_metadata(blob_url: str, storage_account_name: str) -> Optional[
         logging.error(f"Error extracting blob metadata: {str(e)}")
         return None
 
+
+@app.function_name(name="eventgridtrigger")
 @app.event_grid_trigger(arg_name="azeventgrid")
 def blob_created_handler(azeventgrid: func.EventGridEvent):
     """Handle blob created events from Event Grid."""
