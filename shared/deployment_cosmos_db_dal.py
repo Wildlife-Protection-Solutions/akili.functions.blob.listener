@@ -12,6 +12,14 @@ from shared.cosmos_documents import DeploymentFileHashDocument, DeploymentMetada
 class DeploymentCosmosDBDAL(BaseCosmosDBDAL):
     """A class for interacting with the Cosmos DB container for deployment metadata."""
     
+    def __init__(self, container):
+        """ Initializes the DeploymentCosmosDBDAL with the Cosmos DB container.
+
+        Args:
+            container (_type_): _description_
+        """
+        super().__init__(container)
+    
     def get_deployment_metadata(
         self, deployment_id: int
     ) -> Optional[DeploymentMetadataDocument]:
@@ -56,14 +64,14 @@ class DeploymentCosmosDBDAL(BaseCosmosDBDAL):
             raise ValueError("Failed to add deployment metadata: ", metadata.to_dict())
         return DeploymentMetadataDocument.from_dict(item)
     
-    def add_file_hashes(
-        self, deployment_id: int, file_hashes: list[str]
+    def add_file_hash(
+        self, deployment_id: int, file_hash: str
     ) -> Optional[bool]:
-        """Add multiple file hashes in a bulk insert operation.
+        """Add file hash to Cosmos DC.
 
         Args:
             deployment_id (int): the id of the deployment item
-            file_hashes (list[str]): the list of file hashes to add
+            file_hash (str): the file hash to add
 
         Returns:
             bool: True if the operation was successful
@@ -71,34 +79,29 @@ class DeploymentCosmosDBDAL(BaseCosmosDBDAL):
         Raises:
             ValueError: if the deployment metadata does not exist or the operation fails
         """
-        # Create a list of DeploymentFileHashDocument objects
-        file_hash_documents = [
-            DeploymentFileHashDocument(
+        file_hash_document = DeploymentFileHashDocument(
                 file_hash=file_hash,
                 deployment_id=deployment_id,
                 created_ms=int(datetime.now(timezone.utc).timestamp() * 1000),
             )
-            for file_hash in file_hashes
-        ]
         batch_operations = [
             ('create', (file_hash_document.to_dict(),))
-            for file_hash_document in file_hash_documents
         ]
         # Update the deployment metadata
         metadata = self.get_deployment_metadata(deployment_id)
         if not metadata:
-            raise ValueError("Deployment metadata does not exist.")
-        metadata.hash_count += len(file_hashes)
+            raise ValueError(f"Deployment metadata does not exist for {deployment_id}.")
+        metadata.hash_count +=  1
         metadata.last_update_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         item_id = str(deployment_id)
         item_body = metadata.to_dict()
         batch_operations.append(
             ("replace", (item_id, item_body))
         )
-        # Add the file hash documents and update the metadata in a batch operation
+        # Add the file hash document and update the metadata in a batch operation
         results = self.execute_batch_items(batch_operations, partition_key=deployment_id)
         if not results:
-            raise ValueError("Failed to add file hashes: ", file_hashes)
+            raise ValueError("Failed to add file hash: ", file_hash_document.to_dict())
         # Return the updated metadata
         return True
     
@@ -120,7 +123,7 @@ class DeploymentCosmosDBDAL(BaseCosmosDBDAL):
         """
         metadata = self.get_deployment_metadata(deployment_id)
         if not metadata:
-            raise ValueError("Deployment metadata does not exist.")
+            raise ValueError(f"Deployment metadata does not exist for {deployment_id}.")
         
         metadata.upload_in_progress = upload_in_progress
         metadata.upload_user_id = str(user_id) if user_id else None
